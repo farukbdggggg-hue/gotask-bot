@@ -1,5 +1,4 @@
 import os
-import threading
 from flask import Flask, render_template_string, request, redirect, url_for
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
@@ -9,6 +8,10 @@ ADMIN_ID = 8937305240
 
 bot = telebot.TeleBot(TOKEN, threaded=False)
 app = Flask(__name__)
+
+# আপনার Render ওয়েবসাইটের লাইভ লিংকটি এখানে বসান (শেষে স্ল্যাশ / বাদ দিয়ে)
+# উদাহরণ: https://gotask-bot.onrender.com
+RENDER_URL = 'https://gotask-bot.onrender.com'
 
 user_balances = {}
 pending_tasks = {}
@@ -231,6 +234,17 @@ HTML_TEMPLATE = """
 def admin_dashboard():
     return render_template_string(HTML_TEMPLATE, tasks=pending_tasks, withdrawals=pending_withdrawals)
 
+# টেলিগ্রাম থেকে আসা মেসেজ রিসিভ করার ওয়েবহুক রুট
+@app.route(f'/{TOKEN}', methods=['POST'])
+def webhook():
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return "OK", 200
+    else:
+        return "Invalid message", 403
+
 @app.route('/approve_task/<tid>')
 def approve_task(tid):
     if tid in pending_tasks:
@@ -283,15 +297,9 @@ def reject_withdraw(wid):
         del pending_withdrawals[wid]
     return redirect(url_for('admin_dashboard'))
 
-# ওয়েবট্রিগার বা ব্যাকগ্রাউন্ডে পোলিং চালু রাখার জন্য সেফ থ্রেড
-def run_bot():
-    try:
-        bot.remove_webhook()
-        bot.infinity_polling(none_stop=True, interval=0, timeout=20)
-    except Exception as e:
-        print(e)
-
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    threading.Thread(target=run_bot, daemon=True).start()
+    # ওয়েবহুক সেটআপ করা
+    bot.remove_webhook()
+    bot.set_webhook(url=f"{RENDER_URL}/{TOKEN}")
     app.run(host='0.0.0.0', port=port)
