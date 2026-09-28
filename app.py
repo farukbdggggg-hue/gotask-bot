@@ -5,20 +5,17 @@ import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
 TOKEN = '8755176846:AAGNHyaxfWRSowqV1yPAhQfiYQ4VHO3txK0'
-ADMIN_ID = 8937305240  # আপনার টেলিগ্রাম আইডি
+ADMIN_ID = 8937305240
 
-bot = telebot.TeleBot(TOKEN)
+bot = telebot.TeleBot(TOKEN, threaded=False)
 app = Flask(__name__)
 
-# ডাটাবেজ মেমোরি
 user_balances = {}
-pending_tasks = {}  # task_id -> {chat_id, user_name, fname, uname, pwd, platform}
-pending_withdrawals = {} # withdraw_id -> {chat_id, user_name, amount, method, number}
+pending_tasks = {}
+pending_withdrawals = {}
 
 task_counter = 0
 withdraw_counter = 0
-
-# --- টেলিগ্রাম বট লজিক ---
 
 def main_menu():
     markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -51,7 +48,6 @@ def generate_task_data(call):
     is_insta = "insta" in call.data
     platform = "Instagram" if is_insta else "Facebook"
     
-    # ডেমো জেনারেটেড ডিটেইলস (ইউজার এই নাম দিয়ে একাউন্ট খুলবে)
     fname = "Alexander Smith" if is_insta else "David Johnson"
     uname = f"user_{os.urandom(3).hex()}"
     pwd = f"Pass@{os.urandom(2).hex()}99"
@@ -84,7 +80,6 @@ def handle_submission(call):
     task_counter += 1
     t_id = str(task_counter)
     
-    # এডমিন প্যানেলে পাঠানোর জন্য সেভ করে রাখা
     pending_tasks[t_id] = {
         "chat_id": chat_id,
         "user_name": user_name,
@@ -148,8 +143,6 @@ def referral_section(message):
 def how_to_work(message):
     bot.reply_to(message, "📖 **কীভাবে কাজ করবেন:**\n\n১. '💰 কাজ' বাটনে ক্লিক করুন।\n২. ইনস্টাগ্রাম বা ফেসবুক সিলেক্ট করলে একটি নাম, ইউজারনেম ও পাসওয়ার্ড পাবেন।\n৩. ওই তথ্য দিয়ে একাউন্ট খুলে 'Done & Submit' দিন।\n৪. এডমিন চেক করে এপ্রুভ করলেই আপনার ব্যালেন্সে টাকা যোগ হবে।")
 
-# --- ফ্লাস্ক ওয়েব এডমিন প্যানেল HTML & Routes ---
-
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -172,7 +165,7 @@ HTML_TEMPLATE = """
     <h1>🛠️ Admin Control Panel</h1>
 
     <div class="section">
-        <h2>📥 Pending Task Submissions (Account Checks)</h2>
+        <h2>📥 Pending Task Submissions</h2>
         <table>
             <tr>
                 <th>ID</th>
@@ -243,17 +236,12 @@ def approve_task(tid):
     if tid in pending_tasks:
         t = pending_tasks[tid]
         reward = 3 if t['platform'] == "Instagram" else 4
-        
-        # ব্যালেন্স যোগ করা
         current = user_balances.get(t['chat_id'], 0.0)
         user_balances[t['chat_id']] = current + reward
-        
-        # ইউজারকে নোটিফিকেশন পাঠানো
         try:
             bot.send_message(t['chat_id'], f"🎉 অভিনন্দন! আপনার জমা দেওয়া {t['platform']} একাউন্ট এডমিন চেক করে **এপ্রুভ** করেছেন। আপনার একাউন্টে {reward} টাকা যোগ হয়েছে।")
         except:
             pass
-            
         del pending_tasks[tid]
     return redirect(url_for('admin_dashboard'))
 
@@ -274,17 +262,13 @@ def approve_withdraw(wid):
         w = pending_withdrawals[wid]
         chat_id = w['chat_id']
         amount = w['amount']
-        
-        # ব্যালেন্স কেটে নেওয়া
         current = user_balances.get(chat_id, 0.0)
         if current >= amount:
             user_balances[chat_id] = current - amount
-            
         try:
             bot.send_message(chat_id, f"✅ আপনার উইথড্র সফল হয়েছে! আপনার {w['method']} ({w['number']}) নম্বরে {amount} টাকা পাঠানো হয়েছে।")
         except:
             pass
-            
         del pending_withdrawals[wid]
     return redirect(url_for('admin_dashboard'))
 
@@ -299,10 +283,15 @@ def reject_withdraw(wid):
         del pending_withdrawals[wid]
     return redirect(url_for('admin_dashboard'))
 
-# রেন্ডার বা সার্ভারে রান করার জন্য
+# ওয়েবট্রিগার বা ব্যাকগ্রাউন্ডে পোলিং চালু রাখার জন্য সেফ থ্রেড
+def run_bot():
+    try:
+        bot.remove_webhook()
+        bot.infinity_polling(none_stop=True, interval=0, timeout=20)
+    except Exception as e:
+        print(e)
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    # ব্যাকগ্রাউন্ডে বট রান করার থ্রেড
-    threading.Thread(target=lambda: bot.infinity_polling(), daemon=True).start()
+    threading.Thread(target=run_bot, daemon=True).start()
     app.run(host='0.0.0.0', port=port)
-
