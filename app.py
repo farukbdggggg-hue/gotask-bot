@@ -1,11 +1,10 @@
 import os
-import threading
 from flask import Flask, render_template_string, request, redirect, url_for
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
 TOKEN = '8755176846:AAGNHyaxfWRSowqV1yPAhQfiYQ4VHO3txK0'
-ADMIN_ID = 8937305240
+RENDER_URL = 'https://gotask-bot.onrender.com' # আপনার রেন্ডার লিংকটি এখানে দিন
 
 bot = telebot.TeleBot(TOKEN, threaded=False)
 app = Flask(__name__)
@@ -231,6 +230,16 @@ HTML_TEMPLATE = """
 def admin_dashboard():
     return render_template_string(HTML_TEMPLATE, tasks=pending_tasks, withdrawals=pending_withdrawals)
 
+@app.route(f'/{TOKEN}', methods=['POST'])
+def webhook():
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return "!", 200
+    else:
+        return "Internal Server Error", 403
+
 @app.route('/approve_task/<tid>')
 def approve_task(tid):
     if tid in pending_tasks:
@@ -283,15 +292,8 @@ def reject_withdraw(wid):
         del pending_withdrawals[wid]
     return redirect(url_for('admin_dashboard'))
 
-# পোলিং করার আগে আগের ওয়েবহুক পরিষ্কার করে নেওয়া
-def run_bot():
-    try:
-        bot.remove_webhook()
-        bot.infinity_polling(none_stop=True, interval=0, timeout=20)
-    except Exception as e:
-        print(e)
-
 if __name__ == '__main__':
+    bot.remove_webhook()
+    bot.set_webhook(url=f"{RENDER_URL}/{TOKEN}")
     port = int(os.environ.get("PORT", 5000))
-    threading.Thread(target=run_bot, daemon=True).start()
     app.run(host='0.0.0.0', port=port)
