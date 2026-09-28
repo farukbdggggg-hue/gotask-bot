@@ -4,7 +4,10 @@ import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
 TOKEN = '8755176846:AAGNHyaxfWRSowqV1yPAhQfiYQ4VHO3txK0'
-RENDER_URL = 'https://gotask-bot.onrender.com' # আপনার রেন্ডার লিংকটি এখানে দিন
+ADMIN_ID = 8937305240
+
+# আপনার Render প্রজেক্টের সঠিক লাইভ লিংকটি এখানে বসাবেন (শেষে কোনো স্ল্যাশ / রাখবেন না)
+RENDER_URL = 'https://gotask-bot.onrender.com'
 
 bot = telebot.TeleBot(TOKEN, threaded=False)
 app = Flask(__name__)
@@ -230,15 +233,15 @@ HTML_TEMPLATE = """
 def admin_dashboard():
     return render_template_string(HTML_TEMPLATE, tasks=pending_tasks, withdrawals=pending_withdrawals)
 
+# টেলিগ্রাম ওয়েবহুক রুট
 @app.route(f'/{TOKEN}', methods=['POST'])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
         json_string = request.get_data().decode('utf-8')
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
-        return "!", 200
-    else:
-        return "Internal Server Error", 403
+        return "OK", 200
+    return "Forbidden", 403
 
 @app.route('/approve_task/<tid>')
 def approve_task(tid):
@@ -293,6 +296,7 @@ def reject_withdraw(wid):
     return redirect(url_for('admin_dashboard'))
 
 if __name__ == '__main__':
+    # অ্যাপ স্টার্ট হওয়ার সাথে সাথে ওয়েবহুক বাইন্ড করে নেওয়া
     bot.remove_webhook()
     bot.set_webhook(url=f"{RENDER_URL}/{TOKEN}")
     port = int(os.environ.get("PORT", 5000))
